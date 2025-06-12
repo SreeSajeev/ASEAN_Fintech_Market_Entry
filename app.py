@@ -13,140 +13,177 @@ def load_data():
 
 mci_data, mci_scores, findex, rankings = load_data()
 
-st.title("ASEAN Fintech Market Entry Dashboard")
+st.title(" ASEAN Fintech Market Entry Dashboard")
 
+tabs = st.tabs([
+    "Market Readiness", 
+    "Financial Inclusion", 
+    "Ease of Doing Business", 
+    "Digital vs Inclusion", 
+    "Country Snapshot", 
+    "Top Performers"
+])
 
-# Radar chart
-st.subheader("Market Readiness Comparison")
-countries = st.multiselect(
-    "Select Countries",
-    mci_scores['Country'].unique(),
-    default=["Singapore", "Malaysia", "Indonesia"]
-)
+# --- Tab 1: Market Readiness Radar ---
+with tabs[0]:
+    st.subheader(" Market Readiness Comparison")
+    countries = st.multiselect(
+        "Select Countries",
+        mci_scores['Country'].unique(),
+        default=["Singapore", "Malaysia", "Indonesia"]
+    )
 
-readiness_cols = [
-    'Mobile Social Media Penetration',
-    'Mobile ownership',
-    'E-Government Score'
-]
+    readiness_cols = [
+        'Mobile Social Media Penetration',
+        'Mobile ownership',
+        'E-Government Score'
+    ]
 
-if countries:
-    radar_data = mci_scores[mci_scores['Country'].isin(countries)]
+    if countries:
+        radar_data = mci_scores[mci_scores['Country'].isin(countries)]
 
-    # Ensure selected columns exist
-    missing_cols = [col for col in readiness_cols if col not in radar_data.columns]
-    if missing_cols:
-        st.warning(f"Missing columns: {missing_cols}")
-    else:
-        # Melt data to long format
-        melted = radar_data.melt(
-            id_vars='Country',
-            value_vars=readiness_cols,
-            var_name='Metric',
+        missing_cols = [col for col in readiness_cols if col not in radar_data.columns]
+        if missing_cols:
+            st.warning(f"Missing columns: {missing_cols}")
+        else:
+            melted = radar_data.melt(
+                id_vars='Country',
+                value_vars=readiness_cols,
+                var_name='Metric',
+                value_name='Score'
+            )
+            fig = px.line_polar(
+                melted,
+                r='Score',
+                theta='Metric',
+                color='Country',
+                line_close=True
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+# --- Tab 2: Financial Inclusion Heatmap ---
+with tabs[1]:
+    st.subheader("📌 Financial Inclusion Indicators (Heatmap)")
+    if countries:
+        findex_filtered = findex[findex['Country'].isin(countries)]
+
+        if not findex_filtered.empty:
+            heatmap_data = findex_filtered.set_index('Country').select_dtypes(include='number')
+            fig = px.imshow(
+                heatmap_data,
+                labels=dict(x="Indicator", y="Country", color="Score"),
+                x=heatmap_data.columns,
+                y=heatmap_data.index,
+                color_continuous_scale='Blues'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("No financial inclusion data available for the selected countries.")
+
+# --- Tab 3: Ease of Doing Business ---
+with tabs[2]:
+    st.subheader(" Ease of Doing Business Comparison")
+    eodb_cols = [
+        'Starting a business', 'Getting electricity', 'Registering property',
+        'Getting credit', 'Paying taxes', 'Trading across borders',
+        'Enforcing contracts', 'Resolving insolvency'
+    ]
+    rankings_filtered = rankings[rankings['Economy'].isin(countries)]
+
+    if not rankings_filtered.empty:
+        rankings_melted = rankings_filtered.melt(
+            id_vars='Economy',
+            value_vars=eodb_cols,
+            var_name='Indicator',
             value_name='Score'
         )
-
-        # Plot radar chart
-        fig = px.line_polar(
-            melted,
-            r='Score',
-            theta='Metric',
-            color='Country',
-            line_close=True
+        fig = px.bar(
+            rankings_melted,
+            x='Score',
+            y='Economy',
+            color='Indicator',
+            barmode='group',
+            orientation='h'
         )
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No EoDB data available for the selected countries.")
 
-st.subheader("📌 Financial Inclusion Indicators (Heatmap)")
+# --- Tab 4: Scatter Plot Digital Access vs Inclusion ---
+with tabs[3]:
+    st.subheader(" Digital Access vs Financial Inclusion")
 
-findex_filtered = findex[findex['Country'].isin(countries)]
+    if 'Mobile Social Media Penetration' in mci_scores.columns and 'Country' in findex.columns:
+        merged = pd.merge(
+            mci_scores[['Country', 'Mobile Social Media Penetration']],
+            findex[['Country', 'Account_Penetration']],
+            on='Country',
+            how='inner'
+        )
 
-if not findex_filtered.empty:
-    heatmap_data = findex_filtered.set_index('Country').select_dtypes(include='number')
-    fig = px.imshow(
-        heatmap_data,
-        labels=dict(x="Indicator", y="Country", color="Score"),
-        x=heatmap_data.columns,
-        y=heatmap_data.index,
-        color_continuous_scale='Blues'
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("No financial inclusion data available for the selected countries.")
+        fig = px.scatter(
+            merged,
+            x='Mobile Social Media Penetration',
+            y='Account_Penetration',
+            color='Country',
+            size='Account_Penetration',
+            hover_name='Country',
+            title='Mobile Social Media Penetration vs Account Penetration'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Required columns not found for scatter plot.")
 
-st.subheader(" Ease of Doing Business Comparison")
+# --- Tab 5: Country Snapshot ---
+with tabs[4]:
+    st.subheader(" Country Snapshot")
 
-eodb_cols = [
-    'Starting a business', 'Getting electricity', 'Registering property',
-    'Getting credit', 'Paying taxes', 'Trading across borders',
-    'Enforcing contracts', 'Resolving insolvency'
-]
+    selected_country = st.selectbox("Choose a Country for Detailed View", mci_scores['Country'].unique())
 
-rankings_filtered = rankings[rankings['Economy'].isin(countries)]
+    if selected_country:
+        mci_row = mci_scores[mci_scores['Country'] == selected_country]
+        findex_row = findex[findex['Country'] == selected_country]
 
-if not rankings_filtered.empty:
-    rankings_melted = rankings_filtered.melt(
-        id_vars='Economy',
-        value_vars=eodb_cols,
-        var_name='Indicator',
-        value_name='Score'
-    )
+        st.markdown(f"### 📊 {selected_country} Metrics")
 
-    fig = px.bar(
-        rankings_melted,
-        x='Score',
-        y='Economy',
-        color='Indicator',
-        barmode='group',
-        orientation='h'
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("No EoDB data available for the selected countries.")
+        if not mci_row.empty:
+            st.write("**MCI Scores:**")
+            st.dataframe(mci_row.drop(columns=['Country']).T.rename(columns={mci_row.index[0]: 'Value'}))
 
+        if not findex_row.empty:
+            st.write("**Financial Inclusion Indicators:**")
+            st.dataframe(findex_row.drop(columns=['Country']).T.rename(columns={findex_row.index[0]: 'Value'}))
 
+# --- Tab 6: Top Performers by Metric ---
+with tabs[5]:
+    st.subheader("🏆 Top ASEAN Countries by Individual Metrics")
 
+    # Combined list from both datasets
+    mci_cols = ['Mobile ownership', 'Network coverage', 'Literacy']
+    findex_cols = ['Account_Penetration']
 
-def compute_readiness(df):
-    metrics = ['mobile ownership', 'account_penetration', 'network coverage', 'literacy']
-    df = df.copy()
+    available_metrics = mci_cols + findex_cols
+    metric = st.selectbox("Select a Metric", available_metrics)
 
-    for metric in metrics:
-        if metric in df.columns:
-            min_val = df[metric].min()
-            max_val = df[metric].max()
-            if pd.api.types.is_numeric_dtype(df[metric]):
-                if min_val != max_val:
-                    df[metric] = (df[metric] - min_val) / (max_val - min_val)
-                else:
-                    df[metric] = 1
-            else:
-                st.warning(f"Skipping non-numeric metric: {metric}")
-        else:
-            st.warning(f"Missing metric: {metric}")
+    source_df = None
 
-    weights = {
-        'mobile ownership': 0.25,
-        'account_penetration': 0.25,
-        'network coverage': 0.25,
-        'literacy': 0.25
-    }
+    if metric in findex.columns:
+        source_df = findex[['Country', metric]].dropna()
+    elif metric in mci_scores.columns:
+        source_df = mci_scores[['Country', metric]].dropna()
+    else:
+        st.warning(f"{metric} not found in datasets.")
 
-    df['readiness_score'] = df.apply(
-        lambda row: sum(row[m] * weights[m] for m in weights if m in row),
-        axis=1
-    )
-
-    def assess_risk(score):
-        if score >= 0.75:
-            return "Low Risk"
-        elif score >= 0.60:
-            return "Medium Risk"
-        elif score >= 0.45:
-            return "High Risk"
-        else:
-            return "Very High Risk"
-
-    df['risk_level'] = df['readiness_score'].apply(assess_risk)
-
-    return df[['country'] + metrics + ['readiness_score', 'risk_level']].round(3)
-
+    if source_df is not None and not source_df.empty:
+        top_df = source_df.sort_values(by=metric, ascending=False).head(5)
+        fig = px.bar(
+            top_df,
+            x='Country',
+            y=metric,
+            color='Country',
+            title=f"Top 5 Countries by {metric}",
+            text=metric
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"No data available for the selected metric: {metric}")
